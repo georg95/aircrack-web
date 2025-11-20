@@ -108,9 +108,10 @@ fn set_main_buf(main_buf: ptr<function, array<u32, 16>>, r1: ptr<function, array
   main_buf[15] = 84 * 8;
 }
 
-fn pbkdf2_block(seed1: array<u32, 5>, seed2: array<u32, 5>, main_buf_init: array<u32, 16>) -> array<u32, 5> {
+fn pbkdf2_block(seed1: array<u32, 5>, seed2: array<u32, 5>, part: u32) -> array<u32, 5> {
   var dk: array<u32, 5>;
-  var main_buf = main_buf_init;
+  var main_buf: array<u32, 16>;
+  for (var i = 0u; i < 16u; i++) { main_buf[i] = ESSID_HASHDATA[i + part * 16]; }
   var r1 = sha1_round(&main_buf, seed1);
   set_main_buf(&main_buf, &r1);
   r1 = sha1_round(&main_buf, seed2);
@@ -134,7 +135,7 @@ fn calcPtk(dk1: array<u32, 5>, dk2: array<u32, 5>) -> array<u32, 5> {
   var state = hmac_seed(&tmp_array, 0x36363636);
   var seed2 = hmac_seed(&tmp_array, 0x5c5c5c5c);
   for (var i = 0; i < PTK_HASHDATA_LEN; i++) {
-    tmp_array = PTK_HASHDATA[i];
+    for (var j = 0; j < 16; j++) { tmp_array[j] = PTK_HASHDATA[j + i * 16]; }
     state = sha1_round(&tmp_array, state);
   }
   set_main_buf(&tmp_array, &state);
@@ -148,7 +149,7 @@ fn calcMic(ptk: array<u32, 5>) -> array<u32, 5> {
   var state = hmac_seed(&tmp_array, 0x36363636);
   var seed2 = hmac_seed(&tmp_array, 0x5c5c5c5c);
   for (var i = 0; i < EAPOL_HASHDATA_LEN; i++) {
-    tmp_array = EAPOL_HASHDATA[i];
+    for (var j = 0; j < 16; j++) { tmp_array[j] = EAPOL_HASHDATA[j + i * 16]; }
     state = sha1_round(&tmp_array, state);
   }
   set_main_buf(&tmp_array, &state);
@@ -196,8 +197,8 @@ fn eapol(@builtin(global_invocation_id) gid: vec3<u32>) {
   var password = initPasswordBuffer(input[gid.x]);
   var seed1 = hmac_seed(&password, 0x36363636);
   var seed2 = hmac_seed(&password, 0x5c5c5c5c);
-  var dk1 = pbkdf2_block(seed1, seed2, ESSID_HASHDATA[0]);
-  var dk2 = pbkdf2_block(seed1, seed2, ESSID_HASHDATA[1]);
+  var dk1 = pbkdf2_block(seed1, seed2, 0);
+  var dk2 = pbkdf2_block(seed1, seed2, 1);
   var ptk = calcPtk(dk1, dk2);
   var mic = calcMic(ptk);
   var found = true;
@@ -213,8 +214,8 @@ fn pmkid(@builtin(global_invocation_id) gid: vec3<u32>) {
   var password = initPasswordBuffer(input[gid.x]);
   var seed1 = hmac_seed(&password, 0x36363636);
   var seed2 = hmac_seed(&password, 0x5c5c5c5c);
-  var dk1 = pbkdf2_block(seed1, seed2, ESSID_HASHDATA[0]);
-  var dk2 = pbkdf2_block(seed1, seed2, ESSID_HASHDATA[1]);
+  var dk1 = pbkdf2_block(seed1, seed2, 0);
+  var dk2 = pbkdf2_block(seed1, seed2, 1);
   var pmkid = calcPmkid(dk1, dk2);
   var found = true;
   for (var i = 0; i < 4; i++) { if (EXPECTED_PMKID[i] != pmkid[i]) { found = false; } }

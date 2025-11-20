@@ -84,12 +84,12 @@ async function webGPUinit({ BUF_SIZE, WORKGROUP_SIZE=64 }) {
         assert(handshakeData.version === 1 || handshakeData.version === 2, `unsupported handshakeData version: ${handshakeData.version}`)
         let pbkdf2Code = (await fetch('gpu/pbkdf2_eapol.wgsl').then(r => r.text()))
             .replaceAll('WORKGROUP_SIZE', WORKGROUP_SIZE)
-            .replaceAll('ESSID_HASHDATA__', u32toWgsl2d(handshakeData.essidBuf))
+            .replaceAll('ESSID_HASHDATA__', u32toWgsl(flatU32(handshakeData.essidBuf)))
             .replaceAll('PMK_NAME_BUF__', u32toWgsl(handshakeData.pmkNameBuf || Array(16).fill(0)))
             .replaceAll('EXPECTED_PMKID__', u32toWgsl(handshakeData.pmkid || Array(4).fill(0)))
-            .replaceAll('PTK_HASHDATA__', u32toWgsl2d(handshakeData.ptkBuf || [Array(16).fill(0)]))
+            .replaceAll('PTK_HASHDATA__', u32toWgsl(flatU32(handshakeData.ptkBuf || [Array(16).fill(0)])))
             .replaceAll('PTK_HASHDATA_LEN', handshakeData.ptkBuf?.length || 1)
-            .replaceAll('EAPOL_HASHDATA__', u32toWgsl2d(handshakeData.eapolData || [Array(16).fill(0)]))
+            .replaceAll('EAPOL_HASHDATA__', u32toWgsl(flatU32(handshakeData.eapolData || [Array(16).fill(0)])))
             .replaceAll('EAPOL_HASHDATA_LEN', handshakeData.eapolData?.length || 1)
             .replaceAll('AUTH_MIC__', u32toWgsl(handshakeData.authenticatorMIC || Array(4).fill(0)))
 
@@ -169,6 +169,16 @@ async function bruteGPU(hc22000line, passwordStream, progress) {
 function u32toWgsl(arr) {
     return `array<u32, ${arr.length}>(${Array.from(arr).map(x => '0x'+x.toString(16)).join(',')})`
 }
-function u32toWgsl2d(arr) {
-    return `array<array<u32, ${arr[0].length}>, ${arr.length}>(${arr.map(u32toWgsl).join(',\n')})`
+
+function flatU32(arr) {
+    const len = arr.map(a => a.length).reduce((a, b) => a + b, 0)
+    const resArray = new Uint32Array(len)
+    let curOffset = 0
+    for (let part of arr) {
+        for (let i = 0; i < part.length; i++) {
+            resArray[curOffset + i] = part[i]
+        }
+        curOffset += part.length
+    }
+    return resArray
 }
